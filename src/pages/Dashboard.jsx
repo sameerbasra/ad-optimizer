@@ -1,7 +1,7 @@
+import { BarChart3, Zap, TrendingUp, TrendingDown, AlertTriangle, LogOut, X, ChevronDown, ChevronUp, Bell, User } from "lucide-react"
 import { useState, useMemo, useEffect } from "react"
 import { useAuth } from "../context/AuthContext"
 import { useNavigate } from "react-router-dom"
-import { BarChart3, Zap, TrendingUp, TrendingDown, AlertTriangle, LogOut, X, ChevronDown, ChevronUp, Bell } from "lucide-react"
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { detectAnomalies } from "../lib/anomaly"
 
@@ -136,27 +136,31 @@ export default function Dashboard() {
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1">
           {[
-            { label: "Overview", icon: BarChart3, active: true },
-            { label: "Campaigns", icon: TrendingUp, active: false },
-            { label: "Analytics", icon: BarChart3, active: false },
-          ].map(({ label, icon: Icon, active }) => (
-            <div key={label} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-colors duration-150 ${active ? "bg-brand-600/20 text-brand-400 font-medium" : "text-slate-400 hover:bg-[#334155] hover:text-slate-100"}`}>
-              <Icon size={15} />
-              {label}
+            { label: "Overview",  icon: BarChart3,  path: "/dashboard",            active: true },
+            { label: "Campaigns", icon: TrendingUp,  path: "/dashboard/campaigns",  active: false },
+            { label: "Analytics", icon: BarChart3,   path: "/dashboard/analytics",  active: false },
+            
+            ].map(({ label, icon: Icon, active, path }) => (
+            <div key={label} onClick={() => navigate(path)} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-colors duration-150 ${active ? "bg-brand-600/20 text-brand-400 font-medium" : "text-slate-400 hover:bg-[#334155] hover:text-slate-100"}`}>
+             <Icon size={15} />
+             {label}
             </div>
           ))}
         </nav>
         <div className="px-3 py-4 border-t border-[#334155]">
-          <div className="flex items-center gap-2.5 px-3 py-2 mb-1">
-            <img
-              src={user?.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${user?.email}&background=4f46e5&color=fff`}
+          <div
+             onClick={() => navigate("/dashboard/profile")}
+             className="flex items-center gap-2.5 px-3 py-2 mb-1 rounded-lg hover:bg-[#334155] cursor-pointer transition-colors duration-150"
+            >
+             <img
+             src={user?.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${user?.email}&background=4f46e5&color=fff`}
               alt="avatar"
               className="w-7 h-7 rounded-full"
-            />
-            <span className="text-xs text-slate-400 truncate flex-1">
-              {user?.user_metadata?.full_name || user?.email}
-            </span>
-          </div>
+             />
+             <span className="text-xs text-slate-400 truncate flex-1">
+           {user?.user_metadata?.full_name || user?.email}
+          </span>
+        </div>
           <button onClick={handleSignOut} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-[#334155] hover:text-red-400 transition-colors duration-150">
             <LogOut size={15} />
             Sign out
