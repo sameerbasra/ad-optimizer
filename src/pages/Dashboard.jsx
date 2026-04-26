@@ -1,8 +1,9 @@
-﻿import { useAuth } from "../context/AuthContext"
+import { useState, useMemo, useEffect } from "react"
+import { useAuth } from "../context/AuthContext"
 import { useNavigate } from "react-router-dom"
-import { useEffect } from "react"
-import { BarChart3, Zap, TrendingUp, TrendingDown, AlertTriangle, LogOut } from "lucide-react"
+import { BarChart3, Zap, TrendingUp, TrendingDown, AlertTriangle, LogOut, X, ChevronDown, ChevronUp, Bell } from "lucide-react"
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { detectAnomalies } from "../lib/anomaly"
 
 const METRICS = [
   { title: "ROAS", value: "4.2x", change: 12, up: true, desc: "vs 3.7x last period" },
@@ -22,11 +23,11 @@ const TREND = [
 ]
 
 const CAMPAIGNS = [
-  { name: "Brand Search", status: "Active", spend: 1240, roas: 6.1, ctr: 4.2, alert: null },
-  { name: "Competitor Keywords", status: "Active", spend: 880, roas: 2.8, ctr: 2.1, alert: "Low ROAS" },
-  { name: "Remarketing All", status: "Active", spend: 760, roas: 5.4, ctr: 3.8, alert: null },
-  { name: "Broad Discovery", status: "Paused", spend: 0, roas: 0, ctr: 0, alert: null },
-  { name: "Shopping Electronics", status: "Active", spend: 1400, roas: 3.9, ctr: 2.9, alert: null },
+  { name: "Brand Search", status: "Active", spend: 1240, roas: 6.1, ctr: 4.2 },
+  { name: "Competitor Keywords", status: "Active", spend: 880, roas: 2.8, ctr: 2.1 },
+  { name: "Remarketing All", status: "Active", spend: 760, roas: 5.4, ctr: 3.8 },
+  { name: "Broad Discovery", status: "Paused", spend: 0, roas: 0, ctr: 0 },
+  { name: "Shopping Electronics", status: "Active", spend: 1400, roas: 3.9, ctr: 1.2 },
 ]
 
 function MetricCard({ title, value, change, up, desc }) {
@@ -41,6 +42,44 @@ function MetricCard({ title, value, change, up, desc }) {
       </div>
       <p className="text-2xl font-semibold text-white mb-1">{value}</p>
       <p className="text-xs text-slate-500">{desc}</p>
+    </div>
+  )
+}
+
+function AlertCard({ alert, onDismiss }) {
+  const [expanded, setExpanded] = useState(false)
+  const isCritical = alert.type === "critical"
+  return (
+    <div className={`rounded-xl border p-4 ${isCritical ? "bg-red-400/5 border-red-400/20" : "bg-amber-400/5 border-amber-400/20"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 flex-1">
+          <AlertTriangle size={15} className={`mt-0.5 flex-shrink-0 ${isCritical ? "text-red-400" : "text-amber-400"}`} />
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isCritical ? "bg-red-400/10 text-red-400" : "bg-amber-400/10 text-amber-400"}`}>
+                {isCritical ? "Critical" : "Warning"}
+              </span>
+              <span className="text-xs text-slate-500">{alert.metric}</span>
+            </div>
+            <p className="text-sm font-medium text-white mb-1">{alert.title}</p>
+            <p className="text-xs text-slate-400">{alert.message}</p>
+            {expanded && (
+              <div className="mt-3 p-3 bg-[#0f172a] rounded-lg border border-[#334155]">
+                <p className="text-xs text-slate-300 font-medium mb-1">Recommendation</p>
+                <p className="text-xs text-slate-400 leading-relaxed">{alert.recommendation}</p>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => setExpanded(!expanded)} className="text-slate-500 hover:text-slate-300 transition-colors">
+            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          <button onClick={() => onDismiss(alert.id)} className="text-slate-500 hover:text-slate-300 transition-colors">
+            <X size={14} />
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -60,10 +99,18 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function Dashboard() {
   const { user, signOut, loading } = useAuth()
   const navigate = useNavigate()
+  const [dismissedAlerts, setDismissedAlerts] = useState([])
+  const [showAlerts, setShowAlerts] = useState(true)
 
   useEffect(() => {
     if (!loading && !user) navigate("/login")
   }, [user, loading, navigate])
+
+  const allAlerts = useMemo(() => detectAnomalies(CAMPAIGNS), [])
+  const activeAlerts = allAlerts.filter(a => !dismissedAlerts.includes(a.id))
+  const criticalCount = activeAlerts.filter(a => a.type === "critical").length
+
+  const dismissAlert = (id) => setDismissedAlerts(prev => [...prev, id])
 
   const handleSignOut = async () => {
     await signOut()
@@ -110,10 +157,7 @@ export default function Dashboard() {
               {user?.user_metadata?.full_name || user?.email}
             </span>
           </div>
-          <button
-            onClick={handleSignOut}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-[#334155] hover:text-red-400 transition-colors duration-150"
-          >
+          <button onClick={handleSignOut} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-[#334155] hover:text-red-400 transition-colors duration-150">
             <LogOut size={15} />
             Sign out
           </button>
@@ -126,11 +170,33 @@ export default function Dashboard() {
             <h1 className="text-xl font-semibold text-white">Overview</h1>
             <p className="text-sm text-slate-400 mt-0.5">Apr 1 – Apr 26, 2026</p>
           </div>
-          <span className="flex items-center gap-2 text-xs text-amber-400 bg-amber-400/10 px-3 py-1.5 rounded-full">
-            <AlertTriangle size={12} />
-            1 campaign needs attention
-          </span>
+          <button
+            onClick={() => setShowAlerts(!showAlerts)}
+            className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-full transition-colors duration-150 ${activeAlerts.length > 0 ? "text-amber-400 bg-amber-400/10 hover:bg-amber-400/20" : "text-slate-400 bg-slate-400/10"}`}
+          >
+            <Bell size={12} />
+            {activeAlerts.length > 0 ? `${activeAlerts.length} alerts` : "No alerts"}
+            {criticalCount > 0 && (
+              <span className="bg-red-400 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-medium">
+                {criticalCount}
+              </span>
+            )}
+          </button>
         </div>
+
+        {showAlerts && activeAlerts.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium text-white">Active alerts</h2>
+              <button onClick={() => setDismissedAlerts(allAlerts.map(a => a.id))} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                Dismiss all
+              </button>
+            </div>
+            {activeAlerts.map(alert => (
+              <AlertCard key={alert.id} alert={alert} onDismiss={dismissAlert} />
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {METRICS.map(m => <MetricCard key={m.title} {...m} />)}
@@ -155,7 +221,6 @@ export default function Dashboard() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-
           <div className="card space-y-4">
             <h2 className="text-sm font-medium text-white">Spend by Campaign</h2>
             <ResponsiveContainer width="100%" height={200}>
@@ -184,31 +249,40 @@ export default function Dashboard() {
                   <th className="pb-3 font-medium text-right">Spend</th>
                   <th className="pb-3 font-medium text-right">ROAS</th>
                   <th className="pb-3 font-medium text-right">CTR</th>
-                  <th className="pb-3 font-medium text-right">Alert</th>
+                  <th className="pb-3 font-medium text-right">Issues</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e293b]">
-                {CAMPAIGNS.map(c => (
-                  <tr key={c.name} className="hover:bg-[#1e293b]/50 transition-colors duration-100">
-                    <td className="py-3 text-slate-200 font-medium">{c.name}</td>
-                    <td className="py-3">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${c.status === "Active" ? "bg-emerald-400/10 text-emerald-400" : "bg-slate-400/10 text-slate-400"}`}>
-                        {c.status}
-                      </span>
-                    </td>
-                    <td className="py-3 text-right text-slate-300">{c.spend > 0 ? `$${c.spend.toLocaleString()}` : "—"}</td>
-                    <td className={`py-3 text-right font-medium ${c.roas >= 4 ? "text-emerald-400" : c.roas >= 3 ? "text-amber-400" : c.roas === 0 ? "text-slate-500" : "text-red-400"}`}>
-                      {c.roas > 0 ? `${c.roas}x` : "—"}
-                    </td>
-                    <td className="py-3 text-right text-slate-300">{c.ctr > 0 ? `${c.ctr}%` : "—"}</td>
-                    <td className="py-3 text-right">
-                      {c.alert
-                        ? <span className="flex items-center justify-end gap-1 text-xs text-amber-400"><AlertTriangle size={11} />{c.alert}</span>
-                        : <span className="text-slate-600 text-xs">—</span>
-                      }
-                    </td>
-                  </tr>
-                ))}
+                {CAMPAIGNS.map(c => {
+                  const issues = allAlerts.filter(a => a.campaign === c.name)
+                  return (
+                    <tr key={c.name} className="hover:bg-[#1e293b]/50 transition-colors duration-100">
+                      <td className="py-3 text-slate-200 font-medium">{c.name}</td>
+                      <td className="py-3">
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${c.status === "Active" ? "bg-emerald-400/10 text-emerald-400" : "bg-slate-400/10 text-slate-400"}`}>
+                          {c.status}
+                        </span>
+                      </td>
+                      <td className="py-3 text-right text-slate-300">{c.spend > 0 ? `$${c.spend.toLocaleString()}` : "—"}</td>
+                      <td className={`py-3 text-right font-medium ${c.roas >= 4 ? "text-emerald-400" : c.roas >= 3 ? "text-amber-400" : c.roas === 0 ? "text-slate-500" : "text-red-400"}`}>
+                        {c.roas > 0 ? `${c.roas}x` : "—"}
+                      </td>
+                      <td className={`py-3 text-right font-medium ${c.ctr >= 2 ? "text-slate-300" : c.ctr === 0 ? "text-slate-500" : "text-amber-400"}`}>
+                        {c.ctr > 0 ? `${c.ctr}%` : "—"}
+                      </td>
+                      <td className="py-3 text-right">
+                        {issues.length > 0 ? (
+                          <span className="flex items-center justify-end gap-1 text-xs text-amber-400">
+                            <AlertTriangle size={11} />
+                            {issues.length} issue{issues.length > 1 ? "s" : ""}
+                          </span>
+                        ) : (
+                          <span className="text-emerald-400 text-xs">Good</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
