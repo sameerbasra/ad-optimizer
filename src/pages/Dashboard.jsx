@@ -1,18 +1,19 @@
-import { BarChart3, Zap, TrendingUp, TrendingDown, AlertTriangle, LogOut, X, ChevronDown, ChevronUp, Bell, User } from "lucide-react"
-import { useState, useMemo, useEffect } from "react"
+﻿import { useState, useMemo, useEffect } from "react"
 import { useAuth } from "../context/AuthContext"
 import { useNavigate } from "react-router-dom"
+import { BarChart3, Zap, TrendingUp, TrendingDown, AlertTriangle, LogOut, X, ChevronDown, ChevronUp, Bell, User, Wifi, WifiOff } from "lucide-react"
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { detectAnomalies } from "../lib/anomaly"
+import { checkBackendHealth, getCustomers, getCampaigns, getMetrics } from "../lib/api"
 
-const METRICS = [
+const MOCK_METRICS = [
   { title: "ROAS", value: "4.2x", change: 12, up: true, desc: "vs 3.7x last period" },
   { title: "CPC", value: "$0.84", change: 5, up: false, desc: "avg cost per click" },
   { title: "CTR", value: "3.6%", change: 8, up: true, desc: "click-through rate" },
   { title: "Ad Spend", value: "$4,280", change: 2, up: false, desc: "this month" },
 ]
 
-const TREND = [
+const MOCK_TREND = [
   { date: "Apr 1", roas: 3.2, spend: 580 },
   { date: "Apr 5", roas: 3.6, spend: 620 },
   { date: "Apr 9", roas: 3.1, spend: 590 },
@@ -22,7 +23,7 @@ const TREND = [
   { date: "Apr 25", roas: 4.2, spend: 460 },
 ]
 
-const CAMPAIGNS = [
+const MOCK_CAMPAIGNS = [
   { name: "Brand Search", status: "Active", spend: 1240, roas: 6.1, ctr: 4.2 },
   { name: "Competitor Keywords", status: "Active", spend: 880, roas: 2.8, ctr: 2.1 },
   { name: "Remarketing All", status: "Active", spend: 760, roas: 5.4, ctr: 3.8 },
@@ -99,17 +100,68 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function Dashboard() {
   const { user, signOut, loading } = useAuth()
   const navigate = useNavigate()
+
   const [dismissedAlerts, setDismissedAlerts] = useState([])
   const [showAlerts, setShowAlerts] = useState(true)
+  const [backendOnline, setBackendOnline] = useState(false)
+  const [connectedAccounts, setConnectedAccounts] = useState([])
+  const [selectedAccount, setSelectedAccount] = useState(null)
+  const [campaigns, setCampaigns] = useState(MOCK_CAMPAIGNS)
+  const [metrics, setMetrics] = useState(MOCK_METRICS)
+  const [isRealData, setIsRealData] = useState(false)
+  const [dataLoading, setDataLoading] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) navigate("/login")
   }, [user, loading, navigate])
 
-  const allAlerts = useMemo(() => detectAnomalies(CAMPAIGNS), [])
+  useEffect(() => {
+    async function initBackend() {
+      const healthy = await checkBackendHealth()
+      setBackendOnline(healthy)
+      if (!healthy) return
+
+      const { customer_ids } = await getCustomers()
+      setConnectedAccounts(customer_ids)
+
+      if (customer_ids.length > 0) {
+        setSelectedAccount(customer_ids[0])
+      }
+    }
+    initBackend()
+  }, [])
+
+  useEffect(() => {
+    if (!selectedAccount) return
+    async function loadRealData() {
+      setDataLoading(true)
+      const [campaignData, metricsData] = await Promise.all([
+        getCampaigns(selectedAccount),
+        getMetrics(selectedAccount)
+      ])
+
+      if (campaignData.campaigns && campaignData.campaigns.length > 0) {
+        setCampaigns(campaignData.campaigns)
+        setIsRealData(true)
+      }
+
+      if (metricsData && metricsData.roas) {
+        setMetrics([
+          { title: "ROAS", value: `${metricsData.roas}x`, change: 0, up: metricsData.roas >= 3, desc: "last 30 days" },
+          { title: "CPC", value: `$${metricsData.cpc}`, change: 0, up: false, desc: "avg cost per click" },
+          { title: "CTR", value: `${metricsData.ctr}%`, change: 0, up: metricsData.ctr >= 2, desc: "click-through rate" },
+          { title: "Ad Spend", value: `$${metricsData.spend.toLocaleString()}`, change: 0, up: false, desc: "this month" },
+        ])
+        setIsRealData(true)
+      }
+      setDataLoading(false)
+    }
+    loadRealData()
+  }, [selectedAccount])
+
+  const allAlerts = useMemo(() => detectAnomalies(campaigns), [campaigns])
   const activeAlerts = allAlerts.filter(a => !dismissedAlerts.includes(a.id))
   const criticalCount = activeAlerts.filter(a => a.type === "critical").length
-
   const dismissAlert = (id) => setDismissedAlerts(prev => [...prev, id])
 
   const handleSignOut = async () => {
@@ -136,31 +188,38 @@ export default function Dashboard() {
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1">
           {[
-            { label: "Overview",  icon: BarChart3,  path: "/dashboard",            active: true },
-            { label: "Campaigns", icon: TrendingUp,  path: "/dashboard/campaigns",  active: false },
-            { label: "Analytics", icon: BarChart3,   path: "/dashboard/analytics",  active: false },
-            
-            ].map(({ label, icon: Icon, active, path }) => (
-            <div key={label} onClick={() => navigate(path)} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-colors duration-150 ${active ? "bg-brand-600/20 text-brand-400 font-medium" : "text-slate-400 hover:bg-[#334155] hover:text-slate-100"}`}>
-             <Icon size={15} />
-             {label}
+            { label: "Overview", icon: BarChart3, path: "/dashboard" },
+            { label: "Campaigns", icon: TrendingUp, path: "/dashboard/campaigns" },
+            { label: "Analytics", icon: BarChart3, path: "/dashboard/analytics" },
+          ].map(({ label, icon: Icon, path }) => (
+            <div
+              key={label}
+              onClick={() => navigate(path)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm cursor-pointer transition-colors duration-150 ${
+                location.pathname === path
+                  ? "bg-brand-600/20 text-brand-400 font-medium"
+                  : "text-slate-400 hover:bg-[#334155] hover:text-slate-100"
+              }`}
+            >
+              <Icon size={15} />
+              {label}
             </div>
           ))}
         </nav>
         <div className="px-3 py-4 border-t border-[#334155]">
           <div
-             onClick={() => navigate("/dashboard/profile")}
-             className="flex items-center gap-2.5 px-3 py-2 mb-1 rounded-lg hover:bg-[#334155] cursor-pointer transition-colors duration-150"
-            >
-             <img
-             src={user?.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${user?.email}&background=4f46e5&color=fff`}
+            onClick={() => navigate("/dashboard/profile")}
+            className="flex items-center gap-2.5 px-3 py-2 mb-1 rounded-lg hover:bg-[#334155] cursor-pointer transition-colors duration-150"
+          >
+            <img
+              src={user?.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${user?.email}&background=4f46e5&color=fff`}
               alt="avatar"
               className="w-7 h-7 rounded-full"
-             />
-             <span className="text-xs text-slate-400 truncate flex-1">
-           {user?.user_metadata?.full_name || user?.email}
-          </span>
-        </div>
+            />
+            <span className="text-xs text-slate-400 truncate flex-1">
+              {user?.user_metadata?.full_name || user?.email}
+            </span>
+          </div>
           <button onClick={handleSignOut} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:bg-[#334155] hover:text-red-400 transition-colors duration-150">
             <LogOut size={15} />
             Sign out
@@ -169,29 +228,62 @@ export default function Dashboard() {
       </aside>
 
       <main className="flex-1 ml-56 p-6 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-xl font-semibold text-white">Overview</h1>
-            <p className="text-sm text-slate-400 mt-0.5">Apr 1 – Apr 26, 2026</p>
+            <p className="text-sm text-slate-400 mt-0.5">Last 30 days</p>
           </div>
-          <button
-            onClick={() => setShowAlerts(!showAlerts)}
-            className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-full transition-colors duration-150 ${activeAlerts.length > 0 ? "text-amber-400 bg-amber-400/10 hover:bg-amber-400/20" : "text-slate-400 bg-slate-400/10"}`}
-          >
-            <Bell size={12} />
-            {activeAlerts.length > 0 ? `${activeAlerts.length} alerts` : "No alerts"}
-            {criticalCount > 0 && (
-              <span className="bg-red-400 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-medium">
-                {criticalCount}
-              </span>
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full ${backendOnline ? "bg-emerald-400/10 text-emerald-400" : "bg-red-400/10 text-red-400"}`}>
+              {backendOnline ? <Wifi size={11} /> : <WifiOff size={11} />}
+              {backendOnline
+                ? isRealData
+                  ? `Live data - Account ${selectedAccount}`
+                  : `AI Engine online - ${connectedAccounts.length} accounts`
+                : "AI Engine offline"}
+            </div>
+            {connectedAccounts.length > 1 && (
+              <select
+                value={selectedAccount || ""}
+                onChange={e => setSelectedAccount(e.target.value)}
+                className="bg-[#1e293b] border border-[#334155] text-slate-300 text-xs rounded-lg px-2 py-1.5 outline-none"
+              >
+                {connectedAccounts.map(id => (
+                  <option key={id} value={id}>Account {id}</option>
+                ))}
+              </select>
             )}
-          </button>
+            <button
+              onClick={() => setShowAlerts(!showAlerts)}
+              className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-full transition-colors duration-150 ${activeAlerts.length > 0 ? "text-amber-400 bg-amber-400/10 hover:bg-amber-400/20" : "text-slate-400 bg-slate-400/10"}`}
+            >
+              <Bell size={12} />
+              {activeAlerts.length > 0 ? `${activeAlerts.length} alerts` : "No alerts"}
+              {criticalCount > 0 && (
+                <span className="bg-red-400 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-medium">
+                  {criticalCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
+
+        {!isRealData && backendOnline && (
+          <div className="flex items-center gap-3 p-3 bg-brand-600/10 border border-brand-600/20 rounded-lg">
+            <div className="w-2 h-2 bg-brand-400 rounded-full flex-shrink-0" />
+            <p className="text-xs text-slate-300">
+              AI Engine is online but no campaign data found for connected accounts. Showing demo data. Connect a Google Ads account with active campaigns to see live data.
+            </p>
+          </div>
+        )}
 
         {showAlerts && activeAlerts.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-white">Active alerts</h2>
+              <h2 className="text-sm font-medium text-white">
+                Active alerts
+                {isRealData && <span className="ml-2 text-xs text-emerald-400 font-normal">Live</span>}
+              </h2>
               <button onClick={() => setDismissedAlerts(allAlerts.map(a => a.id))} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
                 Dismiss all
               </button>
@@ -203,14 +295,23 @@ export default function Dashboard() {
         )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {METRICS.map(m => <MetricCard key={m.title} {...m} />)}
+          {dataLoading
+            ? Array(4).fill(0).map((_, i) => (
+                <div key={i} className="card animate-pulse">
+                  <div className="h-3 bg-[#334155] rounded mb-3 w-16" />
+                  <div className="h-8 bg-[#334155] rounded mb-2 w-24" />
+                  <div className="h-3 bg-[#334155] rounded w-32" />
+                </div>
+              ))
+            : metrics.map(m => <MetricCard key={m.title} {...m} />)
+          }
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="card lg:col-span-2 space-y-4">
             <h2 className="text-sm font-medium text-white">ROAS Trend</h2>
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={TREND} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+              <AreaChart data={MOCK_TREND} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="roasGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
@@ -228,7 +329,7 @@ export default function Dashboard() {
           <div className="card space-y-4">
             <h2 className="text-sm font-medium text-white">Spend by Campaign</h2>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={CAMPAIGNS.filter(c => c.spend > 0)} layout="vertical" margin={{ top: 0, right: 4, left: 4, bottom: 0 }}>
+              <BarChart data={campaigns.filter(c => c.spend > 0)} layout="vertical" margin={{ top: 0, right: 4, left: 4, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} width={90} />
@@ -241,8 +342,12 @@ export default function Dashboard() {
 
         <div className="card space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-white">Campaigns</h2>
-            <span className="text-xs text-slate-500">{CAMPAIGNS.length} campaigns</span>
+            <h2 className="text-sm font-medium text-white">
+              Campaigns
+              {isRealData && <span className="ml-2 text-xs text-emerald-400 font-normal">Live data</span>}
+              {!isRealData && <span className="ml-2 text-xs text-slate-500 font-normal">Demo data</span>}
+            </h2>
+            <span className="text-xs text-slate-500">{campaigns.length} campaigns</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -257,28 +362,28 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e293b]">
-                {CAMPAIGNS.map(c => {
+                {campaigns.map(c => {
                   const issues = allAlerts.filter(a => a.campaign === c.name)
                   return (
                     <tr key={c.name} className="hover:bg-[#1e293b]/50 transition-colors duration-100">
                       <td className="py-3 text-slate-200 font-medium">{c.name}</td>
                       <td className="py-3">
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${c.status === "Active" ? "bg-emerald-400/10 text-emerald-400" : "bg-slate-400/10 text-slate-400"}`}>
-                          {c.status}
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${c.status === "Active" || c.status === "ENABLED" ? "bg-emerald-400/10 text-emerald-400" : "bg-slate-400/10 text-slate-400"}`}>
+                          {c.status === "ENABLED" ? "Active" : c.status}
                         </span>
                       </td>
-                      <td className="py-3 text-right text-slate-300">{c.spend > 0 ? `$${c.spend.toLocaleString()}` : "—"}</td>
+                      <td className="py-3 text-right text-slate-300">{c.spend > 0 ? `$${c.spend.toLocaleString()}` : "-"}</td>
                       <td className={`py-3 text-right font-medium ${c.roas >= 4 ? "text-emerald-400" : c.roas >= 3 ? "text-amber-400" : c.roas === 0 ? "text-slate-500" : "text-red-400"}`}>
-                        {c.roas > 0 ? `${c.roas}x` : "—"}
+                        {c.roas > 0 ? `${c.roas}x` : "-"}
                       </td>
-                      <td className={`py-3 text-right font-medium ${c.ctr >= 2 ? "text-slate-300" : c.ctr === 0 ? "text-slate-500" : "text-amber-400"}`}>
-                        {c.ctr > 0 ? `${c.ctr}%` : "—"}
+                      <td className={`py-3 text-right ${c.ctr >= 2 ? "text-slate-300" : c.ctr === 0 ? "text-slate-500" : "text-amber-400"}`}>
+                        {c.ctr > 0 ? `${c.ctr}%` : "-"}
                       </td>
                       <td className="py-3 text-right">
                         {issues.length > 0 ? (
                           <span className="flex items-center justify-end gap-1 text-xs text-amber-400">
                             <AlertTriangle size={11} />
-                            {issues.length} issue{issues.length > 1 ? "s" : ""}
+                            {issues.length}
                           </span>
                         ) : (
                           <span className="text-emerald-400 text-xs">Good</span>

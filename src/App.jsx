@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard"
 import Campaigns from "./pages/Campaigns"
 import Analytics from "./pages/Analytics"
 import Profile from "./pages/Profile"
+import Onboarding from "./pages/Onboarding"
 
 function ProtectedLayout({ children }) {
   return <ProtectedRoute>{children}</ProtectedRoute>
@@ -19,6 +20,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/onboarding" element={<ProtectedLayout><Onboarding /></ProtectedLayout>} />
           <Route path="/dashboard" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
           <Route path="/dashboard/campaigns" element={<ProtectedLayout><Campaigns /></ProtectedLayout>} />
           <Route path="/dashboard/analytics" element={<ProtectedLayout><Analytics /></ProtectedLayout>} />

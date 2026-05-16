@@ -15,12 +15,15 @@ function GoogleIcon() {
 }
 
 export default function Login() {
-  const { user, signInWithGoogle, loading } = useAuth()
+  const { user, onboarded, signInWithGoogle, loading } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (user) navigate("/dashboard")
-  }, [user, navigate])
+    if (!loading && user) {
+      if (onboarded) navigate("/dashboard")
+      else navigate("/onboarding")
+    }
+  }, [user, onboarded, loading, navigate])
 
   if (loading) {
     return (
@@ -55,12 +58,6 @@ export default function Login() {
             By signing in you agree to our Terms and Privacy Policy.
           </p>
         </div>
-        <p className="text-center text-sm text-slate-500 mt-6">
-          No account yet?{" "}
-          <a href="/login" className="text-brand-400 hover:text-brand-300 transition-colors">
-            Sign up free
-          </a>
-        </p>
       </div>
     </div>
   )
