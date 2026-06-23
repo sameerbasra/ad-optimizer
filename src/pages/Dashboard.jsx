@@ -191,6 +191,7 @@ export default function Dashboard() {
             { label: "Overview", icon: BarChart3, path: "/dashboard" },
             { label: "Campaigns", icon: TrendingUp, path: "/dashboard/campaigns" },
             { label: "Analytics", icon: BarChart3, path: "/dashboard/analytics" },
+            { label: "Pricing", icon: Zap, path: "/pricing" },
           ].map(({ label, icon: Icon, path }) => (
             <div
               key={label}

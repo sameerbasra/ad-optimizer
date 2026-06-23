@@ -47,8 +47,9 @@ export default function Landing() {
           </div>
           <div className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-sm text-slate-400 hover:text-white transition-colors">Features</a>
-            <a href="#pricing" className="text-sm text-slate-400 hover:text-white transition-colors">Pricing</a>
+            <a href="/pricing" className="text-sm text-slate-400 hover:text-white transition-colors">Pricing</a>
             <a href="#faq" className="text-sm text-slate-400 hover:text-white transition-colors">FAQ</a>
+           
           </div>
           <div className="flex items-center gap-3">
             <a href="/login" className="text-sm text-slate-400 hover:text-white transition-colors">Sign in</a>
